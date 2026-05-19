@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+.env
+.env.local
+.idea/
+.vscode/
+*.log
+.DS_Store
+
+# Project-specific
+data/
+storage/
+*.zip
+!examples/*.zip
