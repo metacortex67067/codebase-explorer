@@ -1,0 +1,45 @@
+{
+  "description": "Ground-truth Q&A used by scripts/benchmark.py. Each entry lists the module path that the correct answer must cite. Accuracy = fraction of answers whose source citations include the expected module.",
+  "questions": [
+    {
+      "question": "How is a new todo created?",
+      "expected_modules": ["todo_app/service.py", "todo_app/models.py"]
+    },
+    {
+      "question": "What priority levels exist?",
+      "expected_modules": ["todo_app/models.py"]
+    },
+    {
+      "question": "How are todos stored?",
+      "expected_modules": ["todo_app/storage.py"]
+    },
+    {
+      "question": "What happens when a todo is marked done?",
+      "expected_modules": ["todo_app/models.py", "todo_app/service.py"]
+    },
+    {
+      "question": "Can I reopen a completed todo?",
+      "expected_modules": ["todo_app/models.py", "todo_app/service.py"]
+    },
+    {
+      "question": "How does the CLI parse arguments?",
+      "expected_modules": ["todo_app/cli.py"]
+    },
+    {
+      "question": "What error is raised when a todo id is missing?",
+      "expected_modules": ["todo_app/storage.py"]
+    },
+    {
+      "question": "How are open todos sorted?",
+      "expected_modules": ["todo_app/service.py"]
+    },
+    {
+      "question": "How are overdue todos detected?",
+      "expected_modules": ["todo_app/service.py"]
+    },
+    {
+      "question": "What is the public API of InMemoryTodoStore?",
+      "expected_modules": ["todo_app/storage.py"]
+    }
+  ]
+}
