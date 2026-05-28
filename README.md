@@ -140,4 +140,4 @@ scripts/        benchmark.py
 
 ## Лицензия
 
-Учебный проект.
+MIT
