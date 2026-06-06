@@ -1,37 +1,10 @@
 """
 REST API routes.
 
-Endpoint design follows resource-oriented HTTP conventions:
-
-  POST   /repos/from-zip              -- multipart upload of a .zip archive
-  POST   /repos/from-git              -- JSON body with `git_url`
-  GET    /repos                       -- list all indexed repos
-  GET    /repos/{repo_id}             -- one repo's metadata
-  GET    /repos/{repo_id}/modules     -- modules + summaries
-  GET    /repos/{repo_id}/modules/{module_path:path}
-                                      -- one module's full detail
-  GET    /repos/{repo_id}/dependencies -- adjacency-list graph
-  POST   /repos/{repo_id}/ask         -- RAG Q&A
-  DELETE /repos/{repo_id}             -- remove repo (vectors + metadata)
-  GET    /healthz                     -- liveness probe
-
-Notes on choices:
-
-* Two separate "create" endpoints rather than one polymorphic one. A zip
-  upload is a multipart request; a git URL is JSON. Forcing both into one
-  endpoint complicates both the OpenAPI schema (Swagger UI becomes much
-  less readable) and the client code -- it's cleaner to have two routes
-  that do one thing each.
-
-* `module_path:path` uses FastAPI's `:path` converter so that slashes
-  inside the module path (e.g. `pkg/sub/mod.py`) survive routing.
-
-* All RepoService errors are translated to HTTP 4xx/5xx via a single
-  exception handler, so route bodies stay small and uniform.
-
-* RepoService is supplied via FastAPI's dependency-injection system
-  (`Depends(get_repo_service)`) -- this is what lets tests override
-  the service with a fake without monkey-patching.
+Resource-oriented endpoints over RepoService: upload or clone a repo, browse
+its parsed modules and dependency graph, and ask RAG questions. RepoService is
+injected via ``Depends(get_repo_service)`` so tests can override it, and domain
+exceptions are mapped to HTTP responses by ``register_exception_handlers``.
 """
 from __future__ import annotations
 
@@ -50,30 +23,18 @@ from src.core.repo_service import RepoService, RepoServiceError
 from src.ingestion.loader import IngestionError
 
 
-# --- Dependency injection ---------------------------------------------------
-#
-# We hold a single RepoService at module level so it's reused across requests
-# (this keeps the embedder model loaded). Tests override via
-# app.dependency_overrides[get_repo_service] = lambda: <fake>.
-
+# A single RepoService is reused across requests so the embedder stays loaded.
+# Built lazily to avoid touching SQLite/ChromaDB at import time; tests override
+# it via app.dependency_overrides[get_repo_service].
 _repo_service: RepoService | None = None
 
 
 def get_repo_service() -> RepoService:
-    """Lazily build a single RepoService and return it on every request.
-
-    Lazy because importing this module shouldn't try to open SQLite /
-    ChromaDB files (which would happen if we built RepoService at import
-    time). FastAPI dependency overrides bypass this anyway, so tests
-    never trigger the real construction.
-    """
     global _repo_service
     if _repo_service is None:
         _repo_service = RepoService()
     return _repo_service
 
-
-# --- Routes -----------------------------------------------------------------
 
 router = APIRouter()
 
@@ -183,14 +144,8 @@ def delete_repo(
     return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
 
 
-# --- Exception handlers (registered on the app, exported for main.py) ------
-
 def register_exception_handlers(app) -> None:
-    """Translate domain exceptions to clean HTTP responses.
-
-    Keeping this here (rather than scattered try/except in each route)
-    means new routes get the same error handling for free.
-    """
+    """Translate domain exceptions to clean HTTP responses."""
 
     @app.exception_handler(RepoServiceError)
     async def _repo_service_error(_request, exc: RepoServiceError):

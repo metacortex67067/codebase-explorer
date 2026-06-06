@@ -1,38 +1,13 @@
 """
-Semantic chunking of parsed modules.
+Semantic chunking of parsed modules into ``CodeChunk`` objects.
 
-We turn a `Module` (the AST-level representation) into a list of `CodeChunk`s
-that the embedder will turn into vectors. The chunker is the most decision-rich
-part of the indexing layer, so the reasoning is worth spelling out:
-
-Why semantic (function/class) chunks instead of fixed-size windows?
-  * Embedding models for code work much better when the chunk is a complete
-    unit -- a function with its docstring and body sits in a coherent
-    embedding region, whereas an arbitrary 30-line slice that ends in the
-    middle of an if-block does not.
-  * Citations need clean boundaries. If a chunk is exactly one function, the
-    "snippet" we return to the user in QAResponse is meaningful as-is, no
-    extra trimming.
-
-What chunks do we emit per module?
-  1. `module_header` -- one per module. Contains the module docstring plus
-     a compact listing of top-level function / class signatures. This is
-     what RAG retrieves when the question is about the module as a whole
-     ("what does mypkg.service do?") rather than a specific function.
-  2. `function` -- one per top-level function.
-  3. `class` -- one per top-level class (full text including methods). This
-     gives broad context: invariants in __init__, related methods, etc.
-  4. `class_method` -- additionally, one per method. This is the precise
-     retrieval target when the question is about one specific method.
-     The duplication (class chunk + method chunks) is deliberate: a query
-     like "how is increment implemented in Counter" should land on the
-     method chunk, while "what is Counter for" should land on the class
-     chunk. Vector search ranks them naturally.
-
-Stability:
-  * `chunk_id` is deterministic from `(repo_id, qualified_name, chunk_type)`
-    so re-indexing the same repo overwrites cleanly instead of accumulating
-    duplicates in the vector store.
+Chunks are whole semantic units (not fixed-size windows) so each embeds
+coherently and yields clean citation boundaries. Per module we emit:
+``module_header`` (docstring + signatures, for whole-module questions),
+one ``function`` per top-level function, one ``class`` per class, and one
+``class_method`` per method. The class/method overlap is deliberate -- vector
+search ranks the right granularity per question. Chunk ids are deterministic
+from ``(repo_id, qualified_name, chunk_type)`` so re-indexing overwrites cleanly.
 """
 from __future__ import annotations
 
@@ -75,8 +50,6 @@ def chunk_modules(
         out.extend(chunk_module(module, source, repo_id))
     return out
 
-
-# ----- internals ------------------------------------------------------------
 
 def _slice_lines(lines: list[str], line_start: int, line_end: int) -> str:
     """Return the slice of `lines` (1-based, inclusive) joined with '\\n'.

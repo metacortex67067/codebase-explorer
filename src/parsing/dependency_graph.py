@@ -1,14 +1,9 @@
 """
 Dependency graph builder.
 
-Given a list of parsed Modules, produce a mapping
-    module_qualified_name -> list of *internal* module names it imports
-
-"Internal" means the import resolves to another module in the same repo
-(by qualified name prefix match). External imports (stdlib, pypi) are dropped.
-
-We expose this as plain dicts/lists (not a graph library) so the result
-serialises cleanly to JSON for the API.
+Maps each module's qualified name to the internal modules it imports (imports
+that resolve to another module in the same repo; stdlib/pypi are dropped).
+Returned as plain dicts/lists so it serialises cleanly to JSON.
 """
 from __future__ import annotations
 

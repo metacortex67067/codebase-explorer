@@ -1,21 +1,9 @@
 """
-Request and response schemas for the REST API.
+Request/response schemas for the REST API.
 
-Why a separate module from core/models.py?
-
-The pydantic models in `src.core.models` are the *internal* contract
-between layers. The API surface is allowed to diverge from them -- for
-example, a POST body for indexing only needs a `git_url`, not the full
-RepoIndex.
-
-We keep wire-level schemas here so:
-  * Changing the API shape doesn't ripple through internal modules.
-  * Internal models can grow fields (debugging metadata, cache keys) that
-    we don't necessarily want to expose over HTTP.
-
-For responses that are already-clean pydantic models (RepoIndex,
-ModuleSummary, QAResponse), the route can return them directly; FastAPI
-serialises them as JSON via pydantic.
+Kept separate from ``core.models`` (the internal cross-layer contract) so the
+HTTP surface can evolve independently. Responses that are already clean domain
+models (RepoIndex, ModuleSummary, QAResponse) are returned directly.
 """
 from __future__ import annotations
 

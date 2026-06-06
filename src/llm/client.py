@@ -1,124 +1,150 @@
 """
-Anthropic API client wrapper.
+Provider-agnostic chat LLM wrapper.
 
-Why wrap rather than use `anthropic.Anthropic` directly:
-  * Lazy creation -- the SDK does an env-var check on instantiation, so
-    importing this module is side-effect-free until something actually
-    needs to call the LLM (tests, for example, never need a real client).
-  * One place to handle retries on rate limits / transient errors. The
-    rest of the codebase calls `LLMClient.complete(system, user)` and
-    doesn't care about exponential backoff.
-  * One place to enforce missing-API-key errors with a clear message
-    (without this, `anthropic` raises deep in the SDK).
+Three backends are selected by ``settings.llm_provider``: ``ollama`` and
+``openai`` (any OpenAI-compatible endpoint such as Groq or OpenRouter) share
+one code path; ``anthropic`` uses its own SDK. The backend is built lazily on
+the first ``complete()`` call, so importing this module needs no key or network.
 """
 from __future__ import annotations
 
-import time
 from typing import Optional
 
 from src.core.config import settings
 
 
-class LLMConfigError(Exception):
-    """Raised when the LLM client cannot be configured (missing key, etc.)."""
-
-
 class LLMError(Exception):
-    """Raised when the LLM call fails after all retries."""
+    """Raised when the LLM call fails for any reason."""
+
+
+class LLMConfigError(LLMError):
+    """Raised when the LLM client is not configured (e.g. missing API key)."""
+
+
+# Providers that speak the OpenAI chat-completions protocol. Ollama exposes
+# exactly this on /v1, which is why a local model needs no special code.
+_OPENAI_COMPATIBLE = {"ollama", "openai"}
 
 
 class LLMClient:
-    """Thin wrapper around `anthropic.Anthropic` with retries."""
+    """Minimal chat client used for module summaries and Q&A.
+
+    Provider-agnostic: the constructor records config, and the concrete
+    backend (OpenAI-compatible HTTP or Anthropic) is created lazily on the
+    first `complete()` call so that merely importing this module -- as the
+    tests do -- never needs a key or a network.
+    """
 
     def __init__(
         self,
+        provider: Optional[str] = None,
         api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
         model: Optional[str] = None,
-        max_retries: int = 3,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
     ) -> None:
-        self._api_key = api_key or settings.anthropic_api_key
+        self._provider = (provider or settings.llm_provider).lower()
+        self._base_url = base_url or settings.llm_base_url
         self._model = model or settings.llm_model
-        self._max_retries = max_retries
-        self._client = None  # built lazily
+        self._max_tokens = max_tokens or settings.llm_max_tokens
+        self._temperature = (
+            temperature if temperature is not None else settings.llm_temperature
+        )
+        if api_key is not None:
+            self._api_key = api_key
+        elif self._provider == "anthropic":
+            self._api_key = settings.anthropic_api_key
+        else:
+            self._api_key = settings.llm_api_key
+        self._client = None  # lazy init
 
     def _ensure_client(self):
-        """Construct the SDK client on first use."""
+        """Instantiate the backend client on first use."""
         if self._client is not None:
-            return self._client
+            return
+        if self._provider in _OPENAI_COMPATIBLE:
+            self._client = self._build_openai_client()
+        elif self._provider == "anthropic":
+            self._client = self._build_anthropic_client()
+        else:
+            raise LLMConfigError(
+                f"Unknown LLM provider: {self._provider!r}. "
+                "Set LLM_PROVIDER to one of: ollama, openai, anthropic."
+            )
+
+    def _build_openai_client(self):
+        # Ollama doesn't check the key, but the SDK requires a non-empty one.
+        if not self._api_key:
+            self._api_key = "not-needed"
+        try:
+            from openai import OpenAI
+        except ImportError as exc:  # pragma: no cover
+            raise LLMConfigError(
+                "openai package is not installed. Run: pip install openai"
+            ) from exc
+        return OpenAI(base_url=self._base_url, api_key=self._api_key)
+
+    def _build_anthropic_client(self):
         if not self._api_key:
             raise LLMConfigError(
-                "ANTHROPIC_API_KEY is not set. Add it to .env or export it."
+                "ANTHROPIC_API_KEY is not set. Provide it via environment "
+                "or .env to enable LLM features, or switch LLM_PROVIDER to "
+                "'ollama' for a free local model."
             )
-        # Import here so test environments that mock LLMClient don't need to
-        # have `anthropic` installed at all.
-        from anthropic import Anthropic
-        self._client = Anthropic(api_key=self._api_key)
-        return self._client
+        try:
+            import anthropic
+        except ImportError as exc:  # pragma: no cover
+            raise LLMConfigError(
+                "anthropic package is not installed. Run: pip install anthropic"
+            ) from exc
+        return anthropic.Anthropic(api_key=self._api_key)
 
-    def complete(
-        self,
-        system: str,
-        user: str,
-        max_tokens: Optional[int] = None,
-    ) -> str:
-        """Send a single-turn request and return the assistant's text.
+    def complete(self, system: str, user: str) -> str:
+        """Send a system+user prompt and return the text response.
 
-        Retries on transient errors with exponential backoff. We re-raise
-        as our own LLMError so callers don't catch anthropic-specific
-        exception types (loose coupling).
+        Raises LLMError on any backend failure so callers can degrade
+        gracefully (placeholder summaries, raw-text answers, etc.).
         """
-        client = self._ensure_client()
-        max_tokens = max_tokens or settings.llm_max_tokens
+        self._ensure_client()
+        if self._provider in _OPENAI_COMPATIBLE:
+            return self._complete_openai(system, user)
+        return self._complete_anthropic(system, user)
 
-        last_exc: Optional[Exception] = None
-        for attempt in range(self._max_retries):
-            try:
-                response = client.messages.create(
-                    model=self._model,
-                    max_tokens=max_tokens,
-                    system=system,
-                    messages=[{"role": "user", "content": user}],
-                )
-                # The Messages API returns a list of content blocks; we
-                # concatenate the text blocks. For our prompts (always asking
-                # for plain text or JSON) there is normally just one block.
-                return _extract_text(response)
-            except Exception as exc:  # SDK exceptions vary; catch broadly
-                last_exc = exc
-                if not _is_retryable(exc) or attempt == self._max_retries - 1:
-                    break
-                # Exponential backoff: 1s, 2s, 4s...
-                time.sleep(2 ** attempt)
+    def _complete_openai(self, system: str, user: str) -> str:
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                max_tokens=self._max_tokens,
+                temperature=self._temperature,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
+        except Exception as exc:
+            raise LLMError(
+                f"LLM call failed ({self._provider} @ {self._base_url}): {exc}. "
+                "If using Ollama, make sure it is running (`ollama serve`) and "
+                f"the model is pulled (`ollama pull {self._model}`)."
+            ) from exc
+        return (response.choices[0].message.content or "").strip()
 
-        raise LLMError(f"LLM call failed after {self._max_retries} attempts: {last_exc}") from last_exc
+    def _complete_anthropic(self, system: str, user: str) -> str:
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=self._max_tokens,
+                temperature=self._temperature,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+        except Exception as exc:
+            raise LLMError(f"Anthropic API call failed: {exc}") from exc
 
-
-def _extract_text(response) -> str:
-    """Pull plain text out of an anthropic Messages API response."""
-    parts: list[str] = []
-    for block in getattr(response, "content", []) or []:
-        # anthropic SDK returns TextBlock objects with a `.text` attribute
-        text = getattr(block, "text", None)
-        if text:
-            parts.append(text)
-    return "".join(parts)
-
-
-def _is_retryable(exc: Exception) -> bool:
-    """Decide whether to retry given an SDK exception.
-
-    We're conservative: only obvious transient errors (rate limit, overload,
-    network timeout) get retried. Programming errors (invalid request,
-    auth) fail fast.
-    """
-    name = type(exc).__name__
-    return name in {
-        "RateLimitError",
-        "APITimeoutError",
-        "APIConnectionError",
-        "InternalServerError",
-        "OverloadedError",
-    }
+        parts = [block.text for block in response.content if hasattr(block, "text")]
+        return "\n".join(parts).strip()
 
 
+# Module-level singleton used by the production code paths.
 default_llm_client = LLMClient()

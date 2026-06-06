@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Codebase Explorer</title>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --soft: #f1f4fa;
+    --soft-hover: #e9edf6;
+    --line: #e4e8f1;
+    --txt: #1b2333;
+    --muted: #737b8c;
+    --accent: #4f6bed;
+    --accent-press: #3f57d6;
+    --accent-soft: #eef1fe;
+    --ok: #138a5e;
+    --warn: #c2410c;
+    --warn-soft: #fdf0e8;
+    --code-bg: #f8f9fc;
+    --shadow: 0 1px 2px rgba(20,30,60,.04), 0 6px 24px rgba(20,30,60,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    padding: 26px 28px 22px;
+    max-width: 920px; margin: 0 auto;
+  }
+  header h1 {
+    font-size: 22px; margin: 0; letter-spacing: -.02em; font-weight: 700;
+  }
+  header .sub { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+
+  main { max-width: 920px; margin: 0 auto; padding: 0 28px 90px; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; padding: 22px 22px;
+    margin-bottom: 18px; box-shadow: var(--shadow);
+    animation: rise .4s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card h2 {
+    margin: 0 0 16px; font-size: 13px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .card h2 .n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 7px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 12px; font-weight: 700;
+  }
+
+  input[type=text], select {
+    width: 100%; padding: 11px 13px; background: var(--soft);
+    border: 1px solid transparent; border-radius: 10px; color: var(--txt);
+    font-size: 14px; transition: background .15s, border-color .15s, box-shadow .15s;
+    outline: none;
+  }
+  input[type=text]::placeholder { color: #9aa2b3; }
+  input[type=text]:focus, select:focus {
+    background: #fff; border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  select { cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23737b8c' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 34px; }
+  input[type=file] { color: var(--muted); font-size: 13px; }
+  input[type=file]::file-selector-button {
+    margin-right: 12px; padding: 8px 14px; border: 1px solid var(--line);
+    border-radius: 9px; background: var(--soft); color: var(--txt);
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s;
+  }
+  input[type=file]::file-selector-button:hover { background: var(--soft-hover); }
+
+  .row { display: flex; gap: 10px; align-items: stretch; }
+  .row > .grow { flex: 1; min-width: 0; }
+
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 10px;
+    padding: 11px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: background .15s, transform .05s, box-shadow .15s; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  button:hover:not(:disabled) { background: var(--accent-press); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button.ghost {
+    background: var(--soft); color: var(--txt); border: 1px solid var(--line);
+  }
+  button.ghost:hover:not(:disabled) { background: var(--soft-hover); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+
+  .tabs { display: inline-flex; gap: 4px; margin-bottom: 16px;
+          background: var(--soft); padding: 4px; border-radius: 11px; }
+  .tab { padding: 7px 16px; border-radius: 8px; cursor: pointer; font-size: 13.5px;
+         color: var(--muted); font-weight: 600; transition: all .15s; user-select: none; }
+  .tab:hover { color: var(--txt); }
+  .tab.active { color: var(--accent); background: #fff; box-shadow: var(--shadow); }
+
+  .hidden { display: none; }
+  .btns { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 14px; }
+
+  .pill { display: inline-flex; align-items: center; background: var(--soft);
+          border-radius: 999px; padding: 4px 11px; font-size: 12px; color: var(--muted);
+          font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .meta { color: var(--muted); font-size: 13.5px; }
+  .meta b { color: var(--txt); font-weight: 600; }
+
+  .answer { background: var(--soft); border-radius: 12px; padding: 16px 18px;
+            margin-top: 14px; line-height: 1.65; animation: rise .35s ease both; }
+  .modlist { display: flex; flex-direction: column; gap: 2px; }
+  .modrow { padding: 12px 14px; border-radius: 10px; transition: background .12s; }
+  .modrow:hover { background: var(--soft); }
+  .modrow .mp { font-weight: 600; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
+  .modrow .ms { color: var(--muted); font-size: 13.5px; margin-top: 3px; }
+  .graph { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px; line-height: 1.9; }
+  .graph .dep { color: var(--accent); }
+  .graph .none { color: var(--muted); }
+
+  .src { border: 1px solid var(--line); border-radius: 12px; margin-top: 12px;
+         overflow: hidden; animation: rise .35s ease both; }
+  .src .hd { background: var(--soft); padding: 10px 14px; font-size: 13px;
+             display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  .src .hd .qn { font-weight: 600; font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .src .hd .loc { color: var(--ok); font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; white-space: nowrap; }
+  .src pre { margin: 0; padding: 14px; background: var(--code-bg); overflow-x: auto;
+             font: 12.5px/1.6 "SF Mono", Menlo, Consolas, monospace; color: #2b3242; }
+
+  .label { color: var(--muted); font-size: 12.5px; margin: 16px 0 8px; font-weight: 600; }
+
+  .status { font-size: 13px; color: var(--muted); margin-top: 12px; min-height: 18px;
+            display: flex; align-items: center; gap: 8px; }
+  .status.err { color: var(--warn); background: var(--warn-soft); padding: 9px 12px;
+                border-radius: 9px; margin-top: 12px; }
+  .status.ok { color: var(--ok); }
+
+  /* spinner */
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(79,107,237,.25);
+             border-top-color: var(--accent); border-radius: 50%;
+             animation: spin .7s linear infinite; flex: none; }
+  button .spinner { border-color: rgba(255,255,255,.4); border-top-color: #fff; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* indeterminate progress bar (indexing) */
+  .progress { height: 4px; border-radius: 4px; background: var(--soft);
+              overflow: hidden; margin-top: 14px; }
+  .progress > i { display: block; height: 100%; width: 40%; border-radius: 4px;
+                  background: linear-gradient(90deg, var(--accent), #8aa0f6);
+                  animation: slide 1.1s ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(310%); } }
+
+  /* skeleton shimmer */
+  .skel { border-radius: 8px; background: linear-gradient(90deg, #eef1f7 25%, #e4e8f1 37%, #eef1f7 63%);
+          background-size: 400% 100%; animation: shimmer 1.3s ease infinite; height: 13px; margin: 9px 0; }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .card:nth-child(1) { animation-delay: .02s; }
+  .card:nth-child(2) { animation-delay: .08s; }
+  .card:nth-child(3) { animation-delay: .14s; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Codebase Explorer</h1>
+  <div class="sub">Индексирует Python-репозиторий и отвечает на вопросы о коде с цитатами на строки</div>
+</header>
+<main>
+
+  <!-- STEP 1 -->
+  <div class="card">
+    <h2><span class="n">1</span> Загрузить репозиторий</h2>
+    <div class="tabs">
+      <div class="tab active" data-tab="git">Git URL</div>
+      <div class="tab" data-tab="zip">ZIP-архив</div>
+    </div>
+
+    <div id="tab-git">
+      <div class="row">
+        <div class="grow"><input type="text" id="gitUrl" placeholder="https://github.com/user/repo" /></div>
+        <button id="btnGit">Индексировать</button>
+      </div>
+    </div>
+
+    <div id="tab-zip" class="hidden">
+      <div class="row">
+        <div class="grow"><input type="file" id="zipFile" accept=".zip" /></div>
+        <button id="btnZip">Индексировать</button>
+      </div>
+    </div>
+
+    <div class="status" id="indexStatus"></div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="card">
+    <h2><span class="n">2</span> Выбрать репозиторий</h2>
+    <div class="row">
+      <div class="grow"><select id="repoSelect"><option value="">— нет проиндексированных —</option></select></div>
+      <button class="ghost" id="btnRefresh">Обновить</button>
+    </div>
+    <div class="meta" id="repoMeta" style="margin-top:14px"></div>
+    <div class="btns">
+      <button class="ghost" id="btnModules">Модули</button>
+      <button class="ghost" id="btnGraph">Граф зависимостей</button>
+    </div>
+    <div id="repoExtra"></div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="card">
+    <h2><span class="n">3</span> Задать вопрос о коде</h2>
+    <div class="row">
+      <div class="grow"><input type="text" id="question" placeholder="Например: как создаётся новая задача?" /></div>
+      <button id="btnAsk">Спросить</button>
+    </div>
+    <div class="status" id="askStatus"></div>
+    <div id="answerBox"></div>
+  </div>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let currentRepo = null;
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+function setStatus(el, msg, kind = "", busy = false) {
+  el.className = "status" + (kind ? " " + kind : "");
+  el.innerHTML = (busy ? '<span class="spinner"></span>' : "") + (msg ? `<span>${esc(msg)}</span>` : "");
+}
+function setBtnBusy(btn, busy, label) {
+  if (busy) {
+    btn.dataset.label = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span>${esc(label || btn.dataset.label)}`;
+  } else {
+    btn.disabled = false;
+    btn.textContent = btn.dataset.label || btn.textContent;
+  }
+}
+function skeleton(rows) {
+  let w = ["70%", "92%", "60%", "85%", "78%"];
+  let h = "";
+  for (let i = 0; i < rows; i++) h += `<div class="skel" style="width:${w[i % w.length]}"></div>`;
+  return h;
+}
+
+// ----- tabs -----
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  const tab = t.dataset.tab;
+  $("tab-git").classList.toggle("hidden", tab !== "git");
+  $("tab-zip").classList.toggle("hidden", tab !== "zip");
+}));
+
+// ----- indexing -----
+async function indexResult(promise, btn) {
+  setBtnBusy(btn, true, "Индексируем…");
+  $("indexStatus").className = "status";
+  $("indexStatus").innerHTML =
+    '<span>Парсинг → эмбеддинги → саммари модулей…</span>' +
+    '<div class="progress" style="flex:1;margin:0 0 0 4px"><i></i></div>';
+  try {
+    const res = await promise;
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const data = await res.json();
+    setStatus($("indexStatus"), `Готово: «${data.name}» — ${data.module_count} модулей, ${data.chunk_count} чанков`, "ok");
+    await loadRepos(data.repo_id);
+  } catch (e) {
+    setStatus($("indexStatus"), "Ошибка: " + e.message, "err");
+  } finally {
+    setBtnBusy(btn, false);
+  }
+}
+$("btnGit").addEventListener("click", () => {
+  const url = $("gitUrl").value.trim();
+  if (!url) return setStatus($("indexStatus"), "Введите git URL", "err");
+  indexResult(fetch("/repos/from-git", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ git_url: url }),
+  }), $("btnGit"));
+});
+$("btnZip").addEventListener("click", () => {
+  const f = $("zipFile").files[0];
+  if (!f) return setStatus($("indexStatus"), "Выберите ZIP-файл", "err");
+  const fd = new FormData(); fd.append("file", f);
+  indexResult(fetch("/repos/from-zip", { method: "POST", body: fd }), $("btnZip"));
+});
+
+// ----- repos list -----
+async function loadRepos(selectId) {
+  const res = await fetch("/repos");
+  const repos = await res.json();
+  const sel = $("repoSelect");
+  sel.innerHTML = repos.length ? "" : '<option value="">— нет проиндексированных —</option>';
+  for (const r of repos) {
+    const o = document.createElement("option");
+    o.value = r.repo_id;
+    o.textContent = `${r.name}  ·  ${r.module_count} модулей`;
+    sel.appendChild(o);
+  }
+  if (selectId) sel.value = selectId;
+  onRepoChange();
+}
+function onRepoChange() {
+  currentRepo = $("repoSelect").value || null;
+  $("repoExtra").innerHTML = "";
+  if (!currentRepo) { $("repoMeta").textContent = "Сначала проиндексируйте репозиторий."; return; }
+  const opt = $("repoSelect").selectedOptions[0];
+  $("repoMeta").innerHTML = `Выбран <b>${esc(opt.textContent)}</b> &nbsp;<span class="pill">${esc(currentRepo)}</span>`;
+}
+$("repoSelect").addEventListener("change", onRepoChange);
+$("btnRefresh").addEventListener("click", () => loadRepos(currentRepo));
+
+$("btnModules").addEventListener("click", async () => {
+  if (!currentRepo) return;
+  $("repoExtra").innerHTML = `<div class="answer">${skeleton(4)}</div>`;
+  const res = await fetch(`/repos/${currentRepo}/modules`);
+  const mods = await res.json();
+  $("repoExtra").innerHTML = `<div class="answer"><div class="modlist">` + mods.map(m =>
+    `<div class="modrow"><div class="mp">${esc(m.module_path)}</div><div class="ms">${esc(m.summary)}</div></div>`
+  ).join("") + `</div></div>`;
+});
+$("btnGraph").addEventListener("click", async () => {
+  if (!currentRepo) return;
+  $("repoExtra").innerHTML = `<div class="answer">${skeleton(3)}</div>`;
+  const res = await fetch(`/repos/${currentRepo}/dependencies`);
+  const graph = await res.json();
+  const lines = Object.entries(graph).map(([k, v]) =>
+    `<div>${esc(k)} <span class="dep">→</span> ` +
+    (v.length ? esc(v.join(", ")) : `<span class="none">(нет внутренних зависимостей)</span>`) + `</div>`
+  );
+  $("repoExtra").innerHTML = `<div class="answer graph">` + (lines.join("") || "Граф пуст") + `</div>`;
+});
+
+// ----- ask -----
+$("btnAsk").addEventListener("click", async () => {
+  if (!currentRepo) return setStatus($("askStatus"), "Сначала выберите репозиторий", "err");
+  const q = $("question").value.trim();
+  if (q.length < 3) return setStatus($("askStatus"), "Вопрос слишком короткий", "err");
+  setBtnBusy($("btnAsk"), true, "Думаю…");
+  $("answerBox").innerHTML = "";
+  setStatus($("askStatus"), "Ищем релевантный код и спрашиваем модель…", "", true);
+  try {
+    const res = await fetch(`/repos/${currentRepo}/ask`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const data = await res.json();
+    setStatus($("askStatus"), "");
+    let html = `<div class="answer">${esc(data.answer)}</div>`;
+    if (data.sources && data.sources.length) {
+      html += `<div class="label">Источники (${data.sources.length})</div>`;
+      for (const s of data.sources) {
+        html += `<div class="src"><div class="hd"><span class="qn">${esc(s.qualified_name)}</span>` +
+          `<span class="loc">${esc(s.module_path)}:${s.line_start}-${s.line_end}</span></div>` +
+          `<pre>${esc(s.snippet)}</pre></div>`;
+      }
+    }
+    $("answerBox").innerHTML = html;
+  } catch (e) {
+    setStatus($("askStatus"), "Ошибка: " + e.message, "err");
+  } finally {
+    setBtnBusy($("btnAsk"), false);
+  }
+});
+
+$("question").addEventListener("keydown", e => { if (e.key === "Enter") $("btnAsk").click(); });
+$("gitUrl").addEventListener("keydown", e => { if (e.key === "Enter") $("btnGit").click(); });
+
+loadRepos();
+</script>
+</body>
+</html>

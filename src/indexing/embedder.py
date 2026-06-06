@@ -1,21 +1,9 @@
 """
 Sentence-transformer wrapper for code-chunk embeddings.
 
-We hide `sentence_transformers` behind a thin class so the rest of the code
-depends only on a tiny API surface (`embed_batch`). That matters because:
-  * Loading the model is slow (~1-3s + ~100 MB) and we want to do it lazily,
-    once per process, not on import.
-  * Tests can swap this class with a fake that returns deterministic vectors,
-    avoiding a 100 MB download in CI and making tests fast and offline.
-  * If we ever want to switch model providers (OpenAI, Voyage, a different
-    local model), only this module changes.
-
-Model choice: `all-MiniLM-L6-v2`.
-  * 384-dim, ~22 MB, runs on CPU in real time even on a laptop.
-  * Trained for general semantic similarity. Code is not its training
-    domain, but for retrieval over function/class chunks with docstrings it
-    works well enough -- the bottleneck for a coursework project is rarely
-    the embedding quality but the surrounding RAG plumbing.
+Hides ``sentence_transformers`` behind a small ``embed_batch`` API. The model
+(``all-MiniLM-L6-v2``: 384-dim, CPU-friendly) loads lazily once per process,
+and tests can swap in a fake that returns deterministic vectors offline.
 """
 from __future__ import annotations
 

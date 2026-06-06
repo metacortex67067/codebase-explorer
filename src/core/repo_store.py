@@ -1,27 +1,11 @@
 """
 Persistent metadata store for indexed repositories.
 
-What lives in this store
-------------------------
-
-Vectors live in ChromaDB (under storage/chromadb/), but the *metadata*
-about each indexed repo -- name, indexed_at timestamp, file/module/chunk
-counts, dependency graph, per-module summaries -- needs its own home.
-
-This module provides that home in the form of a tiny SQLite database with
-a single `repos` table. We could have used a JSON file, but:
-
-  * SQLite gives us atomicity for free (write or roll back, no half-written
-    files when the process is killed).
-  * SQLite is in stdlib -- no extra dependency for a coursework project.
-  * Looking up one repo by id is O(log n) and obvious; with JSON we'd be
-    re-reading and re-writing the whole document on every change.
-
-Why store JSON blobs (dependency_graph, summaries) inside a single column
-rather than normalising into separate tables? Because we always read and
-write them together with the parent repo row, and there are no queries
-that need to filter by module name across repos. A blob keeps the schema
-trivial.
+Vectors live in ChromaDB; this SQLite ``repos`` table holds everything else
+(name, timestamp, counts, dependency graph, per-module summaries, parsed
+modules). SQLite gives atomic writes from the stdlib. Composite values
+(graph, summaries, modules) are stored as JSON blobs in single columns since
+they are always read and written together with their repo row.
 """
 from __future__ import annotations
 
@@ -73,7 +57,7 @@ class RepoStore:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
 
-    # ----- CRUD -----------------------------------------------------------
+    # --- CRUD ---
 
     def upsert(
         self,
@@ -188,8 +172,6 @@ class RepoStore:
             )
             return cur.rowcount > 0
 
-
-# ----- internals ------------------------------------------------------------
 
 def _row_to_index(row: sqlite3.Row) -> RepoIndex:
     return RepoIndex(

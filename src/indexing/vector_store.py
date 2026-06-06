@@ -1,29 +1,11 @@
 """
 Vector store wrapper around ChromaDB.
 
-Design choices worth defending:
-
-1. ChromaDB rather than FAISS / Qdrant / pinecone.
-   * Persistent local mode -- no external server, ideal for a coursework
-     project demonstrated on the developer's laptop.
-   * Stores vectors AND metadata together, so we can attach
-     `module_path`, `qualified_name`, `line_start`, `line_end` to each
-     chunk and recover them at query time without a separate database.
-
-2. One shared collection, repos isolated by `where={"repo_id": ...}` filter.
-   * ChromaDB collections are lightweight but managing per-repo collection
-     creation / deletion adds another failure surface.
-   * Metadata-filter isolation is well-supported by Chroma's query API and
-     keeps the wrapper code small.
-
-3. Deterministic chunk_ids (from chunker) + `upsert` semantics:
-   * Re-indexing the same repo overwrites old vectors instead of
-     accumulating duplicates. This matters when the user re-uploads an
-     updated version of the same project.
-
-4. Return `CodeChunk` from `query`, not raw Chroma dicts.
-   * Keeps the storage backend hidden behind the model contract -- the QA
-     layer should not know whether we use Chroma or something else.
+Uses ChromaDB's persistent local mode (no external server) with a single
+shared collection; repos are isolated by a ``where={"repo_id": ...}`` filter.
+Chunk ids are deterministic and writes use ``upsert``, so re-indexing a repo
+overwrites old vectors instead of duplicating them. Queries return
+``CodeChunk`` objects so callers never see raw Chroma dicts.
 """
 from __future__ import annotations
 
@@ -121,8 +103,6 @@ class VectorStore:
         collection = self._ensure_collection()
         collection.delete(where={"repo_id": repo_id})
 
-
-# ----- internals ------------------------------------------------------------
 
 def _chunk_to_metadata(chunk: CodeChunk) -> dict:
     """Build the metadata dict that Chroma stores alongside the vector.

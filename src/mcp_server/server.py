@@ -1,30 +1,11 @@
 """
-MCP (Model Context Protocol) server for Codebase Explorer.
+Stdio MCP (Model Context Protocol) server for Codebase Explorer.
 
-Run with:
     python -m src.mcp_server.server
 
-This starts a stdio-transport MCP server that Claude Desktop / Cursor /
-any MCP-compatible client can connect to. Sample claude_desktop_config.json
-entry:
-
-    {
-      "mcpServers": {
-        "codebase-explorer": {
-          "command": "/abs/path/to/.venv/bin/python",
-          "args": ["-m", "src.mcp_server.server"],
-          "cwd": "/abs/path/to/codebase_explorer"
-        }
-      }
-    }
-
-This module is intentionally a thin adapter:
-  * declares the tools (schemas come from `tools.TOOL_SCHEMAS`),
-  * dispatches calls by name to `tools.dispatch_tool`,
-  * wraps the JSON result in a TextContent envelope.
-
-All real logic lives in `tools.py`, which is exercised by unit tests
-without needing the async MCP runtime.
+A thin adapter: it advertises the tools from ``tools.TOOL_SCHEMAS``, dispatches
+calls by name to ``tools.dispatch_tool``, and wraps each result in a
+TextContent envelope. All real logic lives in ``tools.py``.
 """
 from __future__ import annotations
 

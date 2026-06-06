@@ -1,24 +1,9 @@
 """
-Python AST parser.
+Python AST parser: turns source text into structured ``Module`` objects.
 
-This module turns raw source text into structured `Module` objects.
-Approach: walk the AST produced by stdlib `ast.parse`. We deliberately
-do NOT use third-party libraries -- the stdlib `ast` module is sufficient,
-auditable, and free of dependency surprises.
-
-Why AST instead of regex / line scanning:
-  * Robust to formatting, multi-line definitions, type hints, decorators.
-  * Gives us exact line numbers for every node (needed for chunking and
-    for showing code citations in QA answers).
-  * Lets us walk the tree once and collect imports, classes, functions
-    in a single pass.
-
-Defensive choices:
-  * Syntax errors are reported, never raised: a single broken file should
-    not prevent the rest of the repo from being indexed. We return None
-    for that file and let the caller decide what to do.
-  * Docstrings come from `ast.get_docstring`, which understands the
-    convention of the first string literal in a body.
+Uses the stdlib ``ast`` module (no third-party deps), which gives exact line
+numbers needed for chunking and code citations. Syntax errors are reported, not
+raised -- a single broken file returns None so the rest of the repo still indexes.
 """
 from __future__ import annotations
 
@@ -69,8 +54,6 @@ def parse_repo(source_files: list[SourceFile]) -> tuple[list[Module], list[str]]
             modules.append(module)
     return modules, failed
 
-
-# ----- internals ------------------------------------------------------------
 
 def _path_to_qualified_name(relative_path: str) -> str:
     """Convert 'pkg/sub/mod.py' to 'pkg.sub.mod'; drop trailing '__init__'."""

@@ -1,15 +1,8 @@
 """
-Indexing pipeline: glues chunker, embedder, and vector store together.
+Indexing pipeline: chunk -> embed -> store, in one call for RepoService.
 
-This module is intentionally thin -- it exists so the higher-level
-RepoService has a single function to call ("index this set of modules"),
-without leaking the details of how chunks become vectors.
-
-Why pass in `embedder` and `vector_store` rather than reaching for module-
-level singletons inside the function?
-  * Tests can substitute fakes (deterministic vectors, in-memory store).
-  * Production code can still pass `None` to get the default singletons,
-    so callers don't pay any ergonomics cost.
+``embedder`` and ``vector_store`` are injectable (tests pass fakes); ``None``
+falls back to the default singletons.
 """
 from __future__ import annotations
 

@@ -6,8 +6,6 @@ These pydantic models are the contract between layers:
 - parsing produces Module / FunctionInfo / ClassInfo
 - indexing consumes CodeChunk
 - qa returns QAResponse
-
-Keeping them in one place makes the architecture easy to defend.
 """
 from __future__ import annotations
 

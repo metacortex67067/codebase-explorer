@@ -20,11 +20,14 @@ Rules:
 - Be concrete. Refer to the actual function/class names you see.
 - Do NOT invent functionality that is not implied by the signatures or
   docstring. If the module is too sparse to summarise, say so plainly.
+- ALWAYS write the natural-language text (the "summary" string and every
+  item in "key_responsibilities") in RUSSIAN. Keep code identifiers
+  (function/class names) as-is.
 - Output VALID JSON only -- no surrounding prose, no markdown fences.
 - JSON schema:
     {
-      "summary": "<2-4 sentences>",
-      "key_responsibilities": ["<short bullet>", "<short bullet>", ...]
+      "summary": "<2-4 sentences, in Russian>",
+      "key_responsibilities": ["<short bullet, in Russian>", ...]
     }
 """
 
@@ -53,10 +56,12 @@ Rules:
 - Answer using ONLY the information visible in the chunks. If the chunks
   do not contain the answer, say so plainly -- do not speculate.
 - Cite which chunks you used by their numeric index in the list.
+- ALWAYS write the "answer" text in RUSSIAN, regardless of the language of
+  the question or the code. Keep code identifiers (function/class names) as-is.
 - Output VALID JSON only -- no surrounding prose, no markdown fences.
 - JSON schema:
     {
-      "answer": "<your answer in plain language>",
+      "answer": "<your answer in plain language, in Russian>",
       "used_chunk_indices": [<int>, <int>, ...]
     }
 """

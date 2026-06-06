@@ -1,30 +1,58 @@
 """
 Module summarization via LLM.
 
-We don't send the full source -- only a compact description (docstring +
-signatures). Reasons:
-  * Token budget. A large module with full bodies costs many times more
-    tokens; we don't need the bodies to write a high-level summary.
-  * Signal-to-noise. The LLM should see "what this module exposes" without
-    being distracted by implementation details.
-
-Graceful degradation:
-  * If the LLM returns malformed JSON we fall back to treating the whole
-    text as the summary and an empty responsibilities list. The
-    application never crashes because of bad model output -- this matters
-    for the demo, where the student should not have to debug live.
+Sends only a compact description (docstring + signatures), not full bodies, to
+save tokens and keep the signal high. Malformed JSON from the model degrades
+gracefully to using the raw text as the summary rather than crashing.
 """
 from __future__ import annotations
 
 import json
+import time
 from typing import Optional
 
 from src.core.models import Module, ModuleSummary
-from src.llm.client import LLMClient, default_llm_client
+from src.llm.client import LLMClient, LLMConfigError, LLMError, default_llm_client
 from src.llm.prompts import (
     SUMMARIZE_MODULE_SYSTEM,
     SUMMARIZE_MODULE_USER_TEMPLATE,
 )
+
+# Indexing summarises every module with one LLM call each, fired back-to-back.
+# Free cloud tiers (e.g. Groq) rate-limit such bursts, which would otherwise
+# turn into "(summary unavailable)" placeholders at random. We retry only the
+# transient cases (rate limit / 429 / timeout) with exponential backoff;
+# real misconfiguration (LLMConfigError) is re-raised immediately so we don't
+# stall when there is genuinely no working backend.
+_MAX_ATTEMPTS = 4
+_BASE_DELAY_SECONDS = 2.0
+_TRANSIENT_MARKERS = (
+    "rate limit", "rate_limit", "ratelimit", "429",
+    "too many requests", "timeout", "timed out", "overloaded",
+    "temporarily", "503", "502",
+)
+
+
+def _is_transient(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(marker in msg for marker in _TRANSIENT_MARKERS)
+
+
+def _complete_with_retry(client: LLMClient, system: str, user: str) -> str:
+    """Call the LLM, retrying transient failures with exponential backoff."""
+    last_exc: Optional[Exception] = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            return client.complete(system=system, user=user)
+        except LLMConfigError:
+            raise  # not transient -- no key / unknown provider
+        except LLMError as exc:
+            last_exc = exc
+            if attempt == _MAX_ATTEMPTS - 1 or not _is_transient(exc):
+                raise
+            time.sleep(_BASE_DELAY_SECONDS * (2 ** attempt))
+    assert last_exc is not None  # unreachable, but keeps type-checkers happy
+    raise last_exc
 
 
 def summarize_module(
@@ -41,7 +69,8 @@ def summarize_module(
         classes=_format_classes(module),
     )
 
-    raw = client.complete(
+    raw = _complete_with_retry(
+        client,
         system=SUMMARIZE_MODULE_SYSTEM,
         user=user_message,
     )
@@ -54,8 +83,6 @@ def summarize_module(
         key_responsibilities=responsibilities,
     )
 
-
-# ----- internals ------------------------------------------------------------
 
 def _format_functions(module: Module) -> str:
     if not module.functions:

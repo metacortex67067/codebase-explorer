@@ -1,36 +1,13 @@
 """
-High-level orchestrator: the single entry point used by the API and the
-MCP server.
+High-level orchestrator used by both the API and the MCP server.
 
-RepoService is a thin facade that wires together the lower layers in the
-right order. The public methods correspond one-to-one with what the API
-and MCP tools want to do:
+RepoService is a facade that wires the lower layers in order: ingest -> parse
+-> chunk + embed -> store + summarise, plus metadata reads and RAG Q&A.
 
-  * `create_repo_from_zip` / `create_repo_from_git`  -- ingest -> parse ->
-    chunk + embed -> store + summarise.
-  * `get_repo` / `list_repos` / `delete_repo`        -- metadata lookups.
-  * `get_modules` / `get_module_detail`              -- module listings.
-  * `get_dependency_graph`                           -- the parsed graph.
-  * `ask`                                            -- RAG Q&A.
-
-Design notes
-------------
-
-* Summarising every module via the LLM is expensive (one API call per
-  module). We do it eagerly on index time anyway because:
-    (1) it warms the cache once, then `/modules` reads are instant;
-    (2) any LLM-budget surprise happens at the user-visible "indexing"
-        action, not later when they expect a snappy listing.
-  If the LLM is unavailable (no API key) we degrade gracefully: each
-  module gets a placeholder summary and indexing still succeeds.
-
-* All long-running work runs synchronously. For a coursework demo on a
-  small repo this is fine -- index time is dominated by the embedder
-  warmup, ~seconds, not minutes. A future version could switch to a
-  background task with a job-id endpoint.
-
-* `repo_id` is a short UUID4 hex. We bind ChromaDB and the SQLite row by
-  the same id so cleanup is symmetric: `delete_repo` wipes both.
+Module summaries are generated eagerly at index time (one LLM call each) so
+later ``/modules`` reads are instant; if the LLM is unavailable, indexing still
+succeeds with placeholder summaries. All work is synchronous. ``repo_id`` keys
+both the ChromaDB vectors and the SQLite row, so ``delete_repo`` wipes both.
 """
 from __future__ import annotations
 
@@ -80,7 +57,7 @@ class RepoService:
         self._embedder = embedder or default_embedder
         self._llm = llm_client or default_llm_client
 
-    # ----- ingestion entry points -----------------------------------------
+    # --- ingestion entry points ---
 
     def create_repo_from_zip(self, zip_path: Path, name: str) -> RepoIndex:
         """Ingest a zip-archived repo, index it, and return its RepoIndex."""
@@ -109,7 +86,7 @@ class RepoService:
         files = load_from_directory(Path(directory))
         return self._ingest(files, name)
 
-    # ----- metadata reads -------------------------------------------------
+    # --- metadata reads ---
 
     def get_repo(self, repo_id: str) -> RepoIndex:
         idx = self._repo_store.get(repo_id)
@@ -160,7 +137,7 @@ class RepoService:
             raise RepoServiceError(f"Unknown repo_id: {repo_id}")
         return graph
 
-    # ----- Q&A ------------------------------------------------------------
+    # --- Q&A ---
 
     def ask(self, repo_id: str, question: str) -> QAResponse:
         # Existence check first so callers get a clean "unknown repo" error
@@ -178,7 +155,7 @@ class RepoService:
             llm_client=self._llm,
         )
 
-    # ----- delete ---------------------------------------------------------
+    # --- delete ---
 
     def delete_repo(self, repo_id: str) -> bool:
         """Remove a repo from both vector store and metadata store."""
@@ -192,7 +169,7 @@ class RepoService:
             pass
         return deleted
 
-    # ----- internals ------------------------------------------------------
+    # --- internals ---
 
     def _ingest(self, files: list[SourceFile], name: str) -> RepoIndex:
         """Shared post-ingestion pipeline: parse, index, summarise, persist."""
@@ -223,13 +200,8 @@ class RepoService:
         )
 
     def _summarise_all(self, modules: list[Module]) -> list[ModuleSummary]:
-        """Best-effort summarisation. Falls back to placeholders on failure.
-
-        Why placeholders rather than raising: a missing API key shouldn't
-        block the whole index pipeline -- the user can still browse the
-        parsed structure and the dependency graph; they just won't get
-        LLM-generated descriptions until they configure the key.
-        """
+        """Summarise every module, falling back to a placeholder on failure
+        so a missing/unavailable LLM never blocks the index pipeline."""
         summaries: list[ModuleSummary] = []
         for module in modules:
             try:
@@ -246,7 +218,7 @@ class RepoService:
         return summaries
 
 
-# ----- helpers --------------------------------------------------------------
+# --- helpers ---
 
 def _pair_modules_with_source(
     modules: list[Module],

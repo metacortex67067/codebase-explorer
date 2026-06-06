@@ -1,21 +1,22 @@
 """
 FastAPI application entry point.
 
-Run with:
-    uvicorn src.api.main:app --reload
+    uvicorn src.api.main:app --reload   # Swagger UI at /docs
 
-Swagger UI: http://localhost:8000/docs
-ReDoc:      http://localhost:8000/redoc
-
-We intentionally keep this module tiny -- it only assembles the app from
-parts defined elsewhere (routes, exception handlers). Putting business
-logic here would make it harder to unit-test routes in isolation.
+Assembles the app from routes and exception handlers and serves the
+single-page web UI at "/".
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse, JSONResponse
 
 from src.api.routes import register_exception_handlers, router
+
+# Bundled single-page web UI (src/web/index.html), served at "/".
+WEB_INDEX = Path(__file__).resolve().parent.parent / "web" / "index.html"
 
 
 def create_app() -> FastAPI:
@@ -34,6 +35,17 @@ def create_app() -> FastAPI:
     )
     app.include_router(router)
     register_exception_handlers(app)
+
+    @app.get("/", include_in_schema=False)
+    async def web_ui():
+        """Serve the bundled single-page UI (or a hint if it's missing)."""
+        if WEB_INDEX.is_file():
+            return FileResponse(WEB_INDEX)
+        return JSONResponse(
+            {"detail": "Web UI not found. API docs are at /docs."},
+            status_code=404,
+        )
+
     return app
 
 

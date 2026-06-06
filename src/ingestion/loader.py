@@ -1,19 +1,10 @@
 """
-Repository ingestion.
+Repository ingestion from a zip archive, a git URL, or a local directory.
 
-Two entry points:
-  - load_from_zip(zip_path) -- the user uploaded a zip archive
-  - load_from_git(git_url)  -- the user gave a git URL
-
-Both return a list[SourceFile] after walking the unpacked tree and
-filtering out non-source files and excluded directories.
-
-Decisions worth defending:
-  * We refuse repos that exceed configured size/file-count caps -- prevents
-    runaway memory use and unbounded indexing time.
-  * We read files as UTF-8 with errors='replace' rather than skipping them,
-    so a single weirdly-encoded file does not break ingestion.
-  * The temp directory is the caller's responsibility (use tempfile.TemporaryDirectory).
+Each entry point returns a ``list[SourceFile]`` after walking the tree,
+skipping excluded directories and non-Python files. Repos over the configured
+size/file-count caps are rejected, and files are read as UTF-8 with
+``errors='replace'`` so one odd encoding can't break ingestion.
 """
 from __future__ import annotations
 

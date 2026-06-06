@@ -1,21 +1,9 @@
 """
 Pure-logic implementations of the MCP tools.
 
-Why split this from `server.py`?
-
-The MCP SDK wires tools through an async `Server` runtime that listens
-on stdio. We keep the *what each tool does* logic here as ordinary
-synchronous functions, so:
-
-  * Tests can call them directly with a fake RepoService -- no need to
-    spawn an MCP process, no asyncio plumbing in the test code.
-  * `server.py` becomes a thin adapter (declare schemas, dispatch by
-    name, format text output), which is hard to break and easy to read.
-
-Each tool function takes a `RepoService` and a dict of `arguments` (so
-the call signature matches what the MCP runtime hands us) and returns a
-JSON-serialisable result. `server.py` is responsible for turning that
-result into the MCP TextContent envelope.
+Each tool is an ordinary synchronous function taking a ``RepoService`` and an
+``arguments`` dict and returning a JSON-serialisable result -- kept separate
+from the async ``server.py`` so they can be unit-tested with a fake service.
 """
 from __future__ import annotations
 

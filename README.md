@@ -14,8 +14,11 @@ AI-сервис для понимания чужого Python-кода. Прин
   плюс отдельный `module_header` чанк со сводкой модуля.
 - Векторная индексация (sentence-transformers + ChromaDB) для поиска
   по коду.
-- LLM-генерация объяснений модулей (Anthropic Claude).
+- LLM-генерация объяснений модулей через сменный провайдер: локальный
+  Ollama (бесплатно, офлайн) по умолчанию, либо облако (Groq / OpenRouter)
+  или Anthropic Claude — переключается одной строкой в `.env`.
 - Q&A по коду через RAG с цитированием источников по индексу чанка.
+- Веб-интерфейс (одна страница на `/`): загрузка репо, выбор, вопросы.
 - REST API на FastAPI с автоматическим Swagger UI.
 - MCP-сервер с 7 инструментами для интеграции в Claude Desktop / IDE.
 
@@ -36,12 +39,23 @@ ingestion -> parsing -> indexing -> llm / qa
 python -m venv .venv
 source .venv/bin/activate                # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env                     # затем впиши свой ANTHROPIC_API_KEY
+cp .env.example .env
 
-# REST API
+# Бесплатная LLM через Groq (рекомендуется):
+#   1) получи бесплатный ключ на https://console.groq.com/keys
+#   2) впиши его в .env в строку LLM_API_KEY (блок Option A)
+# Либо полностью офлайн через Ollama — см. блок Option B в .env.example.
+
+# Запуск сервиса
 uvicorn src.api.main:app --reload
-# Swagger UI: http://localhost:8000/docs
+# Веб-интерфейс: http://localhost:8000/
+# Swagger UI:    http://localhost:8000/docs
 ```
+
+LLM-провайдер выбирается в `.env` (`LLM_PROVIDER`): `openai` для Groq /
+OpenRouter (бесплатные тарифы), `ollama` для локального офлайн-запуска или
+`anthropic` (платно). Эмбеддинги и векторный индекс уже локальные и
+бесплатные.
 
 ### Загрузка демо-репозитория через API
 

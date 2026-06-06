@@ -1,33 +1,11 @@
 """
 RAG (retrieval-augmented generation) Q&A loop.
 
-Given a question about a previously indexed repository, this module:
-
-  1. Retrieves the top-K most relevant code chunks (delegated to Retriever).
-  2. Renders them into a numbered prompt block.
-  3. Asks the LLM to answer using only those chunks, and to indicate which
-     chunks were actually used (by their 1-based index in the prompt).
-  4. Parses the JSON response and builds a QAResponse with QASource
-     citations reconstructed from the retrieved chunks.
-
-Design choices worth defending:
-
-* "Cite by index" rather than "cite by qualified_name".
-  Asking the LLM to copy back the qualified_name is fragile -- the model may
-  paraphrase, abbreviate, or hallucinate a name. Numeric indices into a list
-  it just saw are far easier for it to get right, and we recover the full
-  metadata (module path, line range) ourselves from the retrieved list.
-
-* Graceful degradation on bad JSON.
-  Same philosophy as the summarizer: if the LLM returns malformed JSON we
-  keep the raw text as the answer and return an empty source list rather
-  than crashing. A coursework demo must not blow up because of a one-off
-  model wobble.
-
-* Snippet truncation in citations.
-  When showing a citation back to the user, we cap the snippet length so
-  the API response doesn't balloon (a single class chunk can be hundreds
-  of lines). The full text is still in the vector store if needed.
+Retrieves the top-K relevant chunks, renders them as a numbered block, asks the
+LLM to answer using only those chunks and to cite them by index, then rebuilds
+QASource citations from the retrieved list. Citing by numeric index (rather
+than by name) is robust against paraphrasing/hallucination, malformed JSON
+falls back to raw text, and citation snippets are truncated to keep responses small.
 """
 from __future__ import annotations
 
@@ -92,8 +70,6 @@ def answer_question(
         sources=sources,
     )
 
-
-# ----- internals ------------------------------------------------------------
 
 def _format_chunks_block(chunks: list[CodeChunk]) -> str:
     """Render retrieved chunks as a numbered, labelled block for the prompt.

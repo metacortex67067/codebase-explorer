@@ -1,23 +1,9 @@
 """
 Retrieval step of the RAG pipeline.
 
-The retriever takes a free-form question, turns it into a vector via the
-embedder, and asks the vector store for the top-K most similar code chunks
-belonging to a given repository.
-
-Why a separate module (vs. inlining into rag.py)?
-  * The retriever is the natural seam to substitute in tests: rag.py logic
-    (prompt formatting, LLM call, citation assembly) can be tested with a
-    handcrafted list of CodeChunk objects, no real embedder or vector store
-    needed.
-  * If we ever want to swap retrieval strategies (hybrid BM25 + dense,
-    reranking, etc.), only this module changes.
-
-Why a class rather than a free function?
-  * Holds the (lazily-initialised) embedder and vector store, so callers
-    don't re-create them per question. For the API path that is the
-    difference between sub-millisecond and several-second responses
-    (the sentence-transformer model is ~80 MB and slow to load).
+Embeds a free-form question and queries the vector store for the top-K most
+similar chunks in a repo. A class (not a free function) so the embedder and
+vector store are held across questions instead of reloaded each time.
 """
 from __future__ import annotations
 
