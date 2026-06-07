@@ -212,4 +212,4 @@ scripts/        benchmark.py
 
 ## Лицензия
 
-MIT.
+MIT
